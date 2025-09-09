@@ -6,7 +6,7 @@ Chat client that uses a Git repo (via SSH + system git) as a message store.
 Requirements:
     - Python 3
     - Git installed (in PATH)
-    - Repo cloned locally
+    - Repo cloned locally (~/Desktop/RepoChat)
     - SSH keys set up with GitHub
 
 Usage:
@@ -19,18 +19,19 @@ import time
 import threading
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
+from tkinter import ttk, scrolledtext
 
 # --- CONFIG ---
 REPO_DIR = os.path.expanduser("~/Desktop/RepoChat")
 TEXT_FILE = os.path.join(REPO_DIR, "texts.txt")
 AUTO_REFRESH_INTERVAL = 10  # seconds
 MAX_RETRIES = 3
-# ----------------
+
+REMOTE_NAME = "main"      # Your remote is literally named "main"
+REMOTE_BRANCH = "main"    # Your branch on that remote is "main"
 
 # --- Git helpers ---
 def run_git_command(args, cwd=REPO_DIR):
-    """Run a git command and return output (raises on error)."""
     result = subprocess.run(
         ["git"] + args,
         cwd=cwd,
@@ -42,12 +43,21 @@ def run_git_command(args, cwd=REPO_DIR):
     return result.stdout.strip()
 
 def git_pull():
-    return run_git_command(["pull", "--rebase"])
+    """Pull latest changes from main/main with auto-upstream fix."""
+    try:
+        return run_git_command(["pull", REMOTE_NAME, REMOTE_BRANCH])
+    except RuntimeError as e:
+        if "refs/head" in str(e) or "no upstream" in str(e).lower():
+            branch = run_git_command(["rev-parse", "--abbrev-ref", "HEAD"])
+            run_git_command(["branch", "--set-upstream-to", f"{REMOTE_NAME}/{REMOTE_BRANCH}", branch])
+            return run_git_command(["pull", REMOTE_NAME, REMOTE_BRANCH])
+        else:
+            raise
 
 def git_commit_and_push(message):
     run_git_command(["add", TEXT_FILE])
     run_git_command(["commit", "-m", message])
-    run_git_command(["push"])
+    run_git_command(["push", REMOTE_NAME, REMOTE_BRANCH])
 
 # --- File helpers ---
 def read_chat_file():
@@ -63,6 +73,47 @@ def append_message(user, msg):
         f.write(line)
     return line
 
+# --- Emoji picker ---
+EMOJIS = (
+    "😀😃😄😁😆😅😂🤣🥲☺️😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜🤪🤨🧐🤓😎🥸🤩🥳😏😒😞😔😟😕🙁☹️"
+    "😣😖😫😩🥺😢😭😤😠😡🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕"
+    "🤑🤠😈👿👹👺💀☠️👻👽👾🤖🎃😺😸😹😻😼😽🙀😿😾"
+    "🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🙈🙉🙊🐒🐔🐧🐦🐤🐣🐥🦆🦅🦉🦇🐺🐗🐴🦄🐝🐛🦋🐌🐞🐜🪲"
+    "🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🥝🥭🍍🥥🥑🍆🥔🥕🌽🌶️🥒🥬🥦🧄🧅🍄🥜🌰🍞🥐🥖🥯🥞🧇"
+    "🥩🍗🍖🥓🍔🍟🍕🌭🥪🌮🌯🥙🫔🥗🥘🥫🍝🍜🍲🍛🍣🍱🥟🦪🍤"
+    "⚽🏀🏈⚾🥎🎾🏐🏉🥏🎱🪀🏓🏸🥅⛳🏹🎣🤿🥊🥋🎽🛹⛸️🛷🥌🎿⛷️🏂🪂🏋️‍♂️🏋️‍♀️🤼‍♂️🤼‍♀️🤸‍♂️🤸‍♀️"
+    "🎯🎮🕹️🎲🧩🧸🪁🎻🎸🥁🎷🎺🎹🪕🎤🎧📯"
+    "❤️🧡💛💚💙💜🖤🤍🤎💔❣️💕💞💓💗💖💘💝💟"
+    "⭐🌟✨⚡🔥💥☄️💫🌈☀️🌤️⛅🌥️🌦️🌧️⛈️🌩️🌨️❄️☃️⛄🌬️💨🌪️🌫️"
+)
+
+def open_emoji_picker(entry_widget):
+    """Open a scrollable emoji picker window."""
+    picker = tk.Toplevel()
+    picker.title("Emoji Picker")
+    picker.geometry("400x300")
+
+    canvas = tk.Canvas(picker)
+    scrollbar = ttk.Scrollbar(picker, orient="vertical", command=canvas.yview)
+    scroll_frame = ttk.Frame(canvas)
+
+    scroll_frame.bind(
+        "<Configure>",
+        lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+    )
+
+    canvas.create_window((0,0), window=scroll_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    # Add emojis as buttons
+    for i, em in enumerate(EMOJIS):
+        btn = ttk.Button(scroll_frame, text=em, width=3)
+        btn.grid(row=i//10, column=i%10, padx=2, pady=2)
+        btn.config(command=lambda em=em: [entry_widget.insert(tk.END, em), picker.destroy()])
+
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
 # --- GUI ---
 class GitChatApp(tk.Tk):
     def __init__(self):
@@ -73,7 +124,6 @@ class GitChatApp(tk.Tk):
         self._username = tk.StringVar(value="Anon")
         self._status_text = tk.StringVar(value="Ready")
         self._auto_refresh = tk.BooleanVar(value=True)
-
         self._current_content = ""
 
         self._build_ui()
@@ -105,6 +155,7 @@ class GitChatApp(tk.Tk):
         self.entry.bind("<Return>", lambda e: self.send())
 
         ttk.Button(bottom, text="Send", command=self.send).pack(side=tk.LEFT, padx=(6,0))
+        ttk.Button(bottom, text="😊", command=lambda: open_emoji_picker(self.entry)).pack(side=tk.LEFT, padx=(6,0))
 
     def _set_status(self, msg):
         self._status_text.set(msg)
