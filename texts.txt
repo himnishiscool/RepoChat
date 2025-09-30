@@ -39,3 +39,4 @@
 [2025-09-30 11:25:07] forgotName: For anyone who stumbles upon this repository, you need a ssh key
 [2025-09-30 11:25:28] forgotName: You will need to ask me for it and I will provide it to you later
 [2025-09-30 11:25:39] forgotName: 😀
+[2025-09-30 11:26:23] Himnish: There are currently only 2 devices that have the key, the school computer and my iMac
