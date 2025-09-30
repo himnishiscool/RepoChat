@@ -37,3 +37,4 @@
 [2025-09-12 10:27:36] forgotName: s
 [2025-09-12 10:27:36] forgotName: s
 [2025-09-30 11:25:07] forgotName: For anyone who stumbles upon this repository, you need a ssh key
+[2025-09-30 11:25:28] forgotName: You will need to ask me for it and I will provide it to you later
